@@ -65,6 +65,12 @@ type PullEvaluationOptions struct {
 	// context behaviour, and will be removed in 2.0
 	PostInsecureStatusChecks bool `yaml:"post_insecure_status_checks"`
 
+	// ResolveStackedBase treats a pull request that targets the head branch of
+	// another open pull request (a stacked pull request) as targeting the base
+	// branch at the bottom of the stack. The policy is loaded from that branch
+	// and the status context uses its name, so stacks can be merged together.
+	ResolveStackedBase bool `yaml:"resolve_stacked_base"`
+
 	// IgnoreEditedComments enables ignoring comments that have been edited when evaluating approval rules.
 	// This provides a server-side option to ignore edited comments across all rules.
 	IgnoreEditedComments *bool `yaml:"ignore_edited_comments"`
@@ -124,6 +130,7 @@ func (p *PullEvaluationOptions) SetValuesFromEnv(prefix string) {
 	setBoolFromEnv("EXPAND_REQUIRED_REVIEWERS", prefix, &p.ExpandRequiredReviewers)
 	setBoolFromEnv("STRICT_REVIEW_DISMISSAL", prefix, &p.StrictReviewDismissal)
 	setBoolFromEnv("POST_INSECURE_STATUS_CHECKS", prefix, &p.PostInsecureStatusChecks)
+	setBoolFromEnv("RESOLVE_STACKED_BASE", prefix, &p.ResolveStackedBase)
 	setBoolPtrFromEnv("IGNORE_EDITED_COMMENTS", prefix, &p.IgnoreEditedComments)
 
 	p.setApprovalDefaultsFromEnv(prefix + "APPROVAL_DEFAULTS_")

@@ -76,6 +76,16 @@ func (b *Base) NewEvalContext(ctx context.Context, installationID int64, loc pul
 	}
 
 	baseBranch, _ := prctx.Branches()
+	if b.PullOpts.ResolveStackedBase {
+		root, err := resolveStackRoot(ctx, client, loc.Owner, loc.Repo, baseBranch)
+		if err != nil {
+			return nil, err
+		}
+		if root != baseBranch {
+			baseBranch = root
+			prctx = &stackedContext{Context: prctx, base: root}
+		}
+	}
 	owner := prctx.RepositoryOwner()
 	repository := prctx.RepositoryName()
 
