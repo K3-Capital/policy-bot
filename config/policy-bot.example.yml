@@ -122,14 +122,6 @@ sessions:
 #   # POLICYBOT_OPTIONS_STATUS_CHECK_CONTEXT environment variable.
 #   status_check_context: policy-bot
 #
-#   # If true, a pull request that targets the head branch of another open pull
-#   # request (a stacked pull request) is evaluated as if it targeted the base
-#   # branch at the bottom of the stack. The policy is loaded from that branch
-#   # and the status context uses its name, so a whole stack can be merged
-#   # together. Can also be set by the POLICYBOT_OPTIONS_RESOLVE_STACKED_BASE
-#   # environment variable.
-#   resolve_stacked_base: false
-#
 #   # If true, expand teams, organizations, and permissions in the detils UI to
 #   # a list of users. This option has security implications; see the README.
 #   # Can also be set by the POLICYBOT_OPTIONS_EXPAND_REQUIRED_REVIEWERS
