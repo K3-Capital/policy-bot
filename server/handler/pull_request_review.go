@@ -20,6 +20,7 @@ import (
 
 	"github.com/google/go-github/v93/github"
 	"github.com/palantir/go-githubapp/githubapp"
+	"github.com/palantir/policy-bot/policy"
 	"github.com/palantir/policy-bot/policy/common"
 	"github.com/palantir/policy-bot/pull"
 	"github.com/pkg/errors"
@@ -70,7 +71,7 @@ func (h *PullRequestReview) Handle(ctx context.Context, eventType, deliveryID st
 		return nil
 	}
 
-	if !h.affectsApproval(event.GetReview(), evaluator.Methods()) {
+	if !h.affectsApproval(event.GetReview(), evalCtx.Config.Config) {
 		logger.Debug().Msg("Skipping evaluation because this review does not impact approval")
 		return nil
 	}
@@ -84,15 +85,27 @@ func (h *PullRequestReview) Handle(ctx context.Context, eventType, deliveryID st
 	return nil
 }
 
-func (h *PullRequestReview) affectsApproval(review *github.PullRequestReview, methods []*common.Methods) bool {
+func (h *PullRequestReview) affectsApproval(review *github.PullRequestReview, config *policy.Config) bool {
 	// States contains the review states that may affect approval. Always consider dismissed
 	// reviews because they can revert the overall approval or disapproval to a previous state.
 	states := map[pull.ReviewState]bool{
 		pull.ReviewDismissed: true,
 	}
 
-	for _, m := range methods {
+	var methods []*common.Methods
+	for _, rule := range config.ApprovalRules {
+		m := rule.Options.GetMethods()
 		states[m.GithubReviewState] = true
+		methods = append(methods, m)
+	}
+	if disapproval := config.Policy.Disapproval; disapproval != nil {
+		md := disapproval.Options.GetDisapproveMethods()
+		states[md.GithubReviewState] = true
+		methods = append(methods, md)
+
+		mr := disapproval.Options.GetRevokeMethods()
+		states[mr.GithubReviewState] = true
+		methods = append(methods, mr)
 	}
 
 	reviewState := pull.ReviewState(review.GetState())

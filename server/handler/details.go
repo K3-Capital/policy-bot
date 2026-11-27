@@ -63,10 +63,9 @@ func (h *Details) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
 	evalCtx := state.EvalContext
 
 	var data struct {
-		BasePath        string
-		User            string
-		PolicyURL       string
-		ParentPolicyURL string
+		BasePath  string
+		User      string
+		PolicyURL string
 
 		ExpandRequiredReviewers bool
 
@@ -79,10 +78,7 @@ func (h *Details) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
 
 	data.BasePath = getBasePath(h.BaseConfig.PublicURL)
 	data.User = state.Username
-	data.PolicyURL = getPolicyURL(state.PullRequest, evalCtx.Config.Sources[0])
-	if len(evalCtx.Config.Sources) > 1 {
-		data.ParentPolicyURL = getPolicyURL(state.PullRequest, evalCtx.Config.Sources[1])
-	}
+	data.PolicyURL = getPolicyURL(state.PullRequest, evalCtx.Config)
 	data.ExpandRequiredReviewers = h.PullOpts.ExpandRequiredReviewers
 	data.PullRequest = state.PullRequest
 
@@ -92,7 +88,7 @@ func (h *Details) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
 		return h.render(w, data)
 	}
 	if evaluator == nil {
-		data.Error = errors.Errorf("Invalid %s", evalCtx.Config.PolicyLocation())
+		data.Error = errors.Errorf("Invalid policy at %s: %s", evalCtx.Config.Source, evalCtx.Config.Path)
 		return h.render(w, data)
 	}
 
@@ -200,18 +196,14 @@ func (h *Details) render404(w http.ResponseWriter, owner, repo string, number in
 	http.Error(w, msg, http.StatusNotFound)
 }
 
-func getPolicyURL(pr *github.PullRequest, source PolicyLocation) string {
+func getPolicyURL(pr *github.PullRequest, config FetchedConfig) string {
 	base := pr.GetBase().GetRepo().GetHTMLURL()
 	if u, _ := url.Parse(base); u != nil {
-		srcParts := strings.SplitN(source.Source, "@", 2)
-		if len(srcParts) == 1 && source.Source != "" {
-			u.Path = source.Source
-			return u.String()
-		}
+		srcParts := strings.Split(config.Source, "@")
 		if len(srcParts) != 2 {
 			return base
 		}
-		u.Path = path.Join(srcParts[0], "blob", srcParts[1], source.Path)
+		u.Path = path.Join(srcParts[0], "blob", srcParts[1], config.Path)
 		return u.String()
 	}
 	return base

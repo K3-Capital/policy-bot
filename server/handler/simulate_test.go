@@ -59,20 +59,6 @@ func TestNewSimulationResponse(t *testing.T) {
 				Error:  "something broke",
 			},
 		},
-		"empty slot": {
-			Result: &common.Result{
-				Name:              "service",
-				Status:            common.StatusSkipped,
-				StatusDescription: "Slot is empty",
-				Slot:              &common.SlotResult{Name: "service", Empty: true},
-			},
-			Expected: &SimulationResponse{
-				Name:              "service",
-				Status:            "skipped",
-				StatusDescription: "Slot is empty",
-				Slot:              "service",
-			},
-		},
 		"result with children": {
 			Result: &common.Result{
 				Name:              "or",
@@ -105,7 +91,6 @@ func TestNewSimulationResponse(t *testing.T) {
 							{
 								Name:   "or",
 								Status: common.StatusPending,
-								Slot:   &common.SlotResult{Name: "service"},
 								Children: []*common.Result{
 									{Name: "rule-a", Status: common.StatusPending},
 									{Name: "rule-b", Status: common.StatusSkipped, Error: fmt.Errorf("deep error")},
@@ -126,7 +111,6 @@ func TestNewSimulationResponse(t *testing.T) {
 							{
 								Name:   "or",
 								Status: "pending",
-								Slot:   "service",
 								Children: []*SimulationResponse{
 									{Name: "rule-a", Status: "pending"},
 									{Name: "rule-b", Status: "skipped", Error: "deep error"},
@@ -155,7 +139,6 @@ func TestSimulationResponseJSON(t *testing.T) {
 			StatusDescription: "all rules approved",
 			Status:            "approved",
 			Error:             "something broke",
-			Slot:              "service",
 			Children: []*SimulationResponse{
 				{Name: "rule-a", Status: "approved"},
 			},
@@ -168,14 +151,13 @@ func TestSimulationResponseJSON(t *testing.T) {
 		err = json.Unmarshal(data, &fields)
 		require.NoError(t, err)
 
-		expectedKeys := []string{"name", "description", "status_description", "status", "error", "slot", "children"}
+		expectedKeys := []string{"name", "description", "status_description", "status", "error", "children"}
 		for _, key := range expectedKeys {
 			assert.Contains(t, fields, key, "missing expected JSON field %q", key)
 		}
-		assert.JSONEq(t, `"service"`, string(fields["slot"]))
 	})
 
-	t.Run("optional fields omitted when empty", func(t *testing.T) {
+	t.Run("children omitted when empty", func(t *testing.T) {
 		resp := &SimulationResponse{
 			Name:   "my-policy",
 			Status: "approved",
@@ -189,6 +171,5 @@ func TestSimulationResponseJSON(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.NotContains(t, fields, "children")
-		assert.NotContains(t, fields, "slot")
 	})
 }

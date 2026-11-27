@@ -68,35 +68,52 @@ func (ec *EvalContext) Evaluate(ctx context.Context, trigger common.Trigger) err
 	return nil
 }
 
-// ParseConfig reports policy loading or validation errors and returns the policy
-// if it exists, is valid, and requires evaluation for the trigger.
-func (ec *EvalContext) ParseConfig(ctx context.Context, trigger common.Trigger) (*policy.ParsedPolicy, error) {
+// ParseConfig checks and validates the configuration in the EvalContext and
+// returns a non-nil Evaluator if the policy exists, is valid, and requires
+// evaluation for the trigger.
+func (ec *EvalContext) ParseConfig(ctx context.Context, trigger common.Trigger) (common.Evaluator, error) {
 	logger := zerolog.Ctx(ctx)
 
 	fc := ec.Config
 	switch {
 	case fc.LoadError != nil:
-		logger.Warn().Err(fc.LoadError).Bool("seen_policy", fc.SeenPolicy).Msgf("Error loading %s", fc.PolicyLocation())
+		msg := fmt.Sprintf("Error loading policy from %s", fc.Source)
+		logger.Warn().Err(fc.LoadError).Bool("seen_policy", fc.SeenPolicy).Msg(msg)
 
 		// If policy-bot has never seen a policy file for this base branch
 		// then suppress the failing status.
 		if fc.SeenPolicy {
-			ec.PostStatus(ctx, "error", fmt.Sprintf("Error loading policy from %s", fc.Sources[0].Source))
+			ec.PostStatus(ctx, "error", msg)
 		}
-		return nil, errors.Wrapf(fc.LoadError, "failed to load %s", fc.PolicyLocation())
+		return nil, errors.Wrapf(fc.LoadError, "failed to load policy: %s: %s", fc.Source, fc.Path)
 
 	case fc.ParseError != nil:
-		logger.Warn().Err(fc.ParseError).Msg("Invalid policy configuration")
+		msg := fmt.Sprintf("Invalid policy in %s: %s", fc.Source, fc.Path)
+		logger.Warn().Err(fc.ParseError).Msg(msg)
 
-		ec.PostStatus(ctx, "error", fmt.Sprintf("Invalid policy %s", fc.Sources[0]))
-		return nil, errors.WithStack(fc.ParseError)
+		ec.PostStatus(ctx, "error", msg)
+		return nil, errors.Wrapf(fc.ParseError, "failed to parse policy: %s: %s", fc.Source, fc.Path)
 
-	case fc.Policy == nil:
+	case fc.Config == nil:
 		logger.Debug().Msg("No policy defined for repository")
 		return nil, nil
 	}
 
-	policyTrigger := fc.Policy.Trigger()
+	opts := &policy.GlobalOptions{
+		IgnoreEditedComments: ec.Options.IgnoreEditedComments,
+		ApprovalDefaults:     ec.Options.ApprovalDefaults,
+	}
+
+	evaluator, err := policy.ParsePolicy(fc.Config, opts)
+	if err != nil {
+		msg := fmt.Sprintf("Invalid policy in %s: %s", fc.Source, fc.Path)
+		logger.Warn().Err(err).Msg(msg)
+
+		ec.PostStatus(ctx, "error", msg)
+		return nil, errors.Wrapf(err, "failed to create evaluator: %s: %s", fc.Source, fc.Path)
+	}
+
+	policyTrigger := evaluator.Trigger()
 	if !trigger.Matches(policyTrigger) {
 		logger.Debug().
 			Str("event_trigger", trigger.String()).
@@ -104,7 +121,8 @@ func (ec *EvalContext) ParseConfig(ctx context.Context, trigger common.Trigger) 
 			Msg("No evaluation necessary for this trigger, skipping")
 		return nil, nil
 	}
-	return fc.Policy, nil
+
+	return evaluator, nil
 }
 
 // EvaluatePolicy evaluates the policy for a PR and generates a result. The
@@ -115,8 +133,7 @@ func (ec *EvalContext) EvaluatePolicy(ctx context.Context, evaluator common.Eval
 
 	result := evaluator.Evaluate(ctx, ec.PullContext)
 	if result.Error != nil {
-		source := ec.Config.Sources[0]
-		msg := fmt.Sprintf("Error evaluating policy in %s: %s", source.Source, source.Path)
+		msg := fmt.Sprintf("Error evaluating policy in %s: %s", ec.Config.Source, ec.Config.Path)
 		logger.Warn().Err(result.Error).Msg(msg)
 
 		ec.PostStatus(ctx, "error", msg)
@@ -177,7 +194,7 @@ func (ec *EvalContext) PostStatus(ctx context.Context, state, message string) {
 
 	status := github.RepoStatus{
 		State:       &state,
-		Context:     new(fmt.Sprintf("%s: %s", ec.Options.StatusCheckContext, base)),
+		Context:     new(ec.Options.StatusContext(base)),
 		Description: &message,
 		TargetURL:   &detailsURL,
 	}
@@ -195,7 +212,7 @@ func (ec *EvalContext) PostStatus(ctx context.Context, state, message string) {
 	if err := PostStatus(ctx, ec.Client, owner, repo, sha, status); err != nil {
 		logger.Err(err).Msg("Failed to post repo status")
 	}
-	if ec.Options.PostInsecureStatusChecks {
+	if ec.Options.ShouldPostInsecureStatus() {
 		status.Context = new(ec.Options.StatusCheckContext)
 		if err := PostStatus(ctx, ec.Client, owner, repo, sha, status); err != nil {
 			logger.Err(err).Msg("Failed to post insecure repo status")

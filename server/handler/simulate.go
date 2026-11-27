@@ -23,6 +23,7 @@ import (
 	"github.com/google/go-github/v93/github"
 	"github.com/palantir/go-baseapp/baseapp"
 	"github.com/palantir/go-githubapp/githubapp"
+	"github.com/palantir/policy-bot/policy"
 	"github.com/palantir/policy-bot/policy/common"
 	"github.com/palantir/policy-bot/policy/simulated"
 	"github.com/palantir/policy-bot/pull"
@@ -43,7 +44,6 @@ type SimulationResponse struct {
 	StatusDescription string                `json:"status_description"`
 	Status            string                `json:"status"`
 	Error             string                `json:"error"`
-	Slot              string                `json:"slot,omitempty"`
 	Children          []*SimulationResponse `json:"children,omitempty"`
 }
 
@@ -129,12 +129,22 @@ func (h *Simulate) getSimulatedResult(ctx context.Context, installation githubap
 		return nil, errors.Wrap(config.LoadError, "failed to load policy file")
 	case config.ParseError != nil:
 		return nil, errors.Wrap(config.ParseError, "failed to parse policy")
-	case config.Policy == nil:
+	case config.Config == nil:
 		// no policy file found on base branch
 		return nil, nil
 	}
 
-	result := config.Policy.Evaluate(ctx, simulatedCtx)
+	opts := &policy.GlobalOptions{
+		IgnoreEditedComments: h.PullOpts.IgnoreEditedComments,
+		ApprovalDefaults:     h.PullOpts.ApprovalDefaults,
+	}
+
+	evaluator, err := policy.ParsePolicy(config.Config, opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get policy evaluator")
+	}
+
+	result := evaluator.Evaluate(ctx, simulatedCtx)
 	return &result, nil
 }
 
@@ -159,7 +169,11 @@ func (h *Simulate) newSimulatedContext(ctx context.Context, installationID int64
 	baseBranch, _ := simulatedPRCtx.Branches()
 	owner := simulatedPRCtx.RepositoryOwner()
 	repository := simulatedPRCtx.RepositoryName()
-	fetchedConfig := h.ConfigFetcher.ConfigForRepositoryBranch(ctx, client, owner, repository, baseBranch)
+	policyRef, err := h.policyRef(ctx, client, owner, repository, baseBranch, loc.Value.GetBase().GetRepo().GetDefaultBranch())
+	if err != nil {
+		return nil, nil, err
+	}
+	fetchedConfig := h.ConfigFetcher.ConfigForRepositoryBranch(ctx, client, owner, repository, policyRef)
 	return simulatedPRCtx, &fetchedConfig, nil
 }
 
@@ -174,9 +188,6 @@ func newSimulationResponse(result *common.Result) *SimulationResponse {
 		response.Description = result.Description
 		response.StatusDescription = result.StatusDescription
 		response.Status = result.Status.String()
-		if result.Slot != nil {
-			response.Slot = result.Slot.Name
-		}
 		response.Children = buildChildren(result.Children)
 	}
 

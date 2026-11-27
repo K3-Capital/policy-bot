@@ -1,0 +1,23 @@
+# The image K3 Capital runs. Same layout as the official palantirtechnologies/policy-bot image (upstream's docker/Dockerfile, which
+# godel templates from the dist tarball, and which this fork does not carry): a scratch image with the example config at
+# /secrets/policy-bot.yml and, in the working directory, the binary, the compiled frontend (static/) and the templates the
+# server reads at startup.
+#
+# It is built by .github/workflows/k3-publish-image.yml, which first builds the frontend (build/static) and the binary
+# (build/image/policy-bot, linux/amd64, CGO off) on the runner, so no Go or Node image is needed here.
+FROM scratch
+
+STOPSIGNAL SIGINT
+
+COPY config/policy-bot.example.yml /secrets/policy-bot.yml
+
+COPY docker/ca-certificates.crt /etc/ssl/certs/
+COPY docker/mime.types /etc/
+
+WORKDIR /policy-bot
+COPY build/image/policy-bot bin/linux-amd64/policy-bot
+COPY build/static static
+COPY server/templates templates
+
+ENTRYPOINT ["bin/linux-amd64/policy-bot"]
+CMD ["server", "--config", "/secrets/policy-bot.yml"]

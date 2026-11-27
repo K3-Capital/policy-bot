@@ -31,7 +31,6 @@ const (
 	TriggerLabel
 	TriggerStatus
 	TriggerPullRequest
-	TriggerWorkflowRun
 
 	// TriggerStatic is a name for the empty trigger set and means the
 	// computation never needs updating.
@@ -39,7 +38,7 @@ const (
 
 	// TriggerAll is a name for the full trigger set and means the computation
 	// should update after any changes to the pull request.
-	TriggerAll Trigger = TriggerCommit | TriggerComment | TriggerReview | TriggerLabel | TriggerStatus | TriggerPullRequest | TriggerWorkflowRun
+	TriggerAll Trigger = TriggerCommit | TriggerComment | TriggerReview | TriggerLabel | TriggerStatus | TriggerPullRequest
 )
 
 // this is a slice instead of a map so the flags are always in a fixed order
@@ -53,7 +52,6 @@ var triggerStrings = []struct {
 	{TriggerLabel, "Label"},
 	{TriggerStatus, "Status"},
 	{TriggerPullRequest, "PullRequest"},
-	{TriggerWorkflowRun, "WorkflowRun"},
 }
 
 // Matches returns true if flag contains any of the flags of this trigger.
