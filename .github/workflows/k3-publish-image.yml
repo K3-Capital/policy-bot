@@ -4,19 +4,22 @@
 # (linux/amd64, which is what the Fargate task of infra-k3 production/policy-bot runs). The deployment is a change of the image
 # reference in that stack, by digest: nothing is deployed from here.
 #
-# Runs for a push to the k3/stacked-prs branch only. The tests have to pass before anything is built for publication, and a
-# sha-<commit> tag is never replaced (the ECR repository is immutable; a second run of the same commit only reports the digest).
+# Runs for a push to the default branch (develop) only, which holds reviewed code: the organisation's ruleset protect-default-branch
+# requires a pull request, an approval and no force-push there. The tests have to pass before anything is built for publication,
+# and a sha-<commit> tag is never replaced (the ECR repository is immutable; a second run of the same commit only reports the
+# digest).
 #
 # Security contract: `contents: read` + `id-token: write`, every action pinned to a full commit (tag in the comment). The
 # registry credential is a short-lived AWS session from GitHub's OIDC token: the `publish` environment assumes the publish role
 # (infra-k3, production/policy-bot), whose trust policy names this workflow file, this branch and that environment, and which
-# can only push to that one repository. No credential is stored in the repository. Values a step needs are passed through
-# `env:` and expanded quoted; no `${{ }}` expression is interpolated into a `run:` command line.
+# can only push to that one repository. The environment also needs the approval of one of the Production Approvers (not the
+# person who pushed) before the job starts, so a push alone never gets credentials. No credential is stored in the repository.
+# Values a step needs are passed through `env:` and expanded quoted; no `${{ }}` expression is interpolated into a `run:` command line.
 name: K3 publish image
 
 on:
   push:
-    branches: [k3/stacked-prs]
+    branches: [develop]
 
 permissions:
   contents: read
